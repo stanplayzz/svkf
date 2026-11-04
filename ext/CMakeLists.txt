@@ -31,6 +31,3 @@ set_target_properties(VulkanMemoryAllocator PROPERTIES
 
 message(STATUS "[klib]")
 add_subdirectory(src/klib)
-
-message(STATUS "[gsl]")
-add_subdirectory(src/gsl)

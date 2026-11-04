@@ -30,6 +30,14 @@ auto create_window() -> Window {
 	return window;
 }
 
+auto create_surface(Window& window, vk::Instance instance) {
+	auto* surface = VkSurfaceKHR{};
+	if (glfwCreateWindowSurface(instance, window.get(), nullptr, &surface) != VK_SUCCESS) {
+		throw std::runtime_error{"Failed to create Vulkan surface"};
+	}
+	return vk::UniqueSurfaceKHR{surface, instance};
+}
+
 [[nodiscard]] auto locate_assets_dir() -> std::filesystem::path {
 	for (auto path = std::filesystem::current_path(); !path.empty() && path.has_parent_path();
 		 path = path.parent_path()) {
@@ -58,13 +66,20 @@ constexpr auto checker_pixels_v = std::array{
 	std::byte{0x30}, std::byte{0xd0}, std::byte{0xff}, std::byte{0xff},
 };
 
+auto framebuffer_size(Window& window) {
+	auto ret = glm::ivec2{};
+	glfwGetFramebufferSize(window.get(), &ret.x, &ret.y);
+	return ret;
+}
+
 } // namespace
 
 auto main() -> int {
 	try {
 		auto window = create_window();
 		auto instance = svkf::Instance::create();
-		auto render_device = svkf::RenderDevice{{}, *instance, window.get()};
+		auto surface = create_surface(window, *instance);
+		auto render_device = svkf::RenderDevice{{}, *instance, *surface, framebuffer_size(window)};
 		auto const device = render_device.device();
 		auto const queue = device.getQueue(render_device.gpu().queue_family, 0);
 
@@ -130,7 +145,7 @@ auto main() -> int {
 				glfwSetWindowShouldClose(window.get(), GLFW_TRUE);
 			}
 
-			auto const command_buffer = render_device.next_frame();
+			auto const command_buffer = render_device.next_frame(framebuffer_size(window));
 			if (!command_buffer) { continue; }
 
 			auto const descriptor_layouts = std::array{*texture_layout};
@@ -151,6 +166,7 @@ auto main() -> int {
 			command_buffer->drawIndexed(static_cast<std::uint32_t>(indices_v.size()), 1, 0, 0, 0);
 			render_device.render(*command_buffer);
 		}
+		glfwTerminate();
 		return 0;
 	} catch (std::exception const& error) {
 		std::println(stderr, "[SVKF example] {}", error.what());

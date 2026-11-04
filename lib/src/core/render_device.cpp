@@ -6,12 +6,6 @@ using namespace std::chrono_literals;
 
 namespace svkf {
 namespace {
-auto get_framebuffer_size(GLFWwindow* window) {
-	auto ret = glm::ivec2{};
-	glfwGetFramebufferSize(window, &ret.x, &ret.y);
-	return ret;
-};
-
 constexpr auto descriptors_per_type_v{8};
 constexpr auto pool_sizes_v = std::array{
 	vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, descriptors_per_type_v},
@@ -20,14 +14,10 @@ constexpr auto pool_sizes_v = std::array{
 };
 } // namespace
 
-RenderDevice::RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instance instance,
-						   gsl::not_null<GLFWwindow*> window)
-	: m_window(window) {
-	auto* ret = VkSurfaceKHR{};
-	auto const result = glfwCreateWindowSurface(instance, window, nullptr, &ret);
-	if (result != VK_SUCCESS || ret == VkSurfaceKHR{}) { throw std::runtime_error{"Failed to create vulkan surface"}; }
-	m_surface = vk::UniqueSurfaceKHR{ret, instance};
-	m_gpu = Gpu::select_gpu(instance, *m_surface);
+RenderDevice::RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instance instance, vk::SurfaceKHR surface,
+						   glm::ivec2 framebuffer_size)
+	: m_surface(surface), m_framebuffer_size(framebuffer_size) {
+	m_gpu = Gpu::select_gpu(instance, m_surface);
 	m_device = Device::create(m_gpu);
 	m_waiter = *m_device;
 
@@ -49,8 +39,8 @@ RenderDevice::RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instan
 		sync.drawn = m_device->createFenceUnique(fence_ci_v);
 	}
 
-	m_swapchain = std::make_unique<Swapchain>(*m_device, m_gpu, *m_surface, get_framebuffer_size(window),
-											  create_info.present_mode);
+	m_swapchain =
+		std::make_unique<Swapchain>(*m_device, m_gpu, m_surface, m_framebuffer_size, create_info.present_mode);
 
 	m_queue = m_device->getQueue(m_gpu.queue_family, 0);
 
@@ -75,7 +65,8 @@ auto RenderDevice::create_shader(ShaderObjectCreateInfo const& create_info) -> S
 	return Shader{shader_ci};
 }
 
-auto RenderDevice::next_frame() -> std::optional<vk::CommandBuffer> {
+auto RenderDevice::next_frame(glm::ivec2 framebuffer_size) -> std::optional<vk::CommandBuffer> {
+	m_framebuffer_size = framebuffer_size;
 	auto const& sync = m_render_sync.at(m_frame_index);
 
 	if (!get_render_target()) { return std::nullopt; }
@@ -144,16 +135,15 @@ auto RenderDevice::render(vk::CommandBuffer command_buffer) -> bool {
 	m_frame_index = (m_frame_index + 1) % m_render_sync.size();
 	m_render_target.reset();
 
-	if (!m_swapchain->present(m_queue) || get_framebuffer_size(m_window) != m_swapchain->get_size()) {
-		m_swapchain->recreate(get_framebuffer_size(m_window));
+	if (!m_swapchain->present(m_queue) || m_framebuffer_size != m_swapchain->get_size()) {
+		m_swapchain->recreate(m_framebuffer_size);
 	}
 
 	return true;
 }
 
 auto RenderDevice::get_render_target() -> bool {
-	auto framebuffer_size = get_framebuffer_size(m_window);
-	if (framebuffer_size.x <= 0 || framebuffer_size.y <= 0) { return false; }
+	if (m_framebuffer_size.x <= 0 || m_framebuffer_size.y <= 0) { return false; }
 
 	auto& sync = m_render_sync.at(m_frame_index);
 	static constexpr std::uint64_t fence_timeout_v = std::chrono::nanoseconds{3s}.count();
@@ -162,7 +152,7 @@ auto RenderDevice::get_render_target() -> bool {
 
 	m_render_target = m_swapchain->acquire_next_image(*sync.draw);
 	if (!m_render_target) {
-		m_swapchain->recreate(framebuffer_size);
+		m_swapchain->recreate(m_framebuffer_size);
 		return false;
 	}
 

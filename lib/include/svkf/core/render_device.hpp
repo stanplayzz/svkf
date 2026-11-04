@@ -7,8 +7,7 @@
 #include "svkf/core/shader.hpp"
 #include "svkf/core/swapchain.hpp"
 #include "svkf/detail/vma.hpp"
-#include <GLFW/glfw3.h>
-#include <gsl/pointers>
+#include <memory>
 
 namespace svkf {
 struct RenderDeviceCreateInfo {
@@ -27,10 +26,10 @@ struct ShaderObjectCreateInfo {
 
 class RenderDevice {
   public:
-	explicit RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instance instance,
-						  gsl::not_null<GLFWwindow*> window);
+	explicit RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instance instance, vk::SurfaceKHR surface,
+						  glm::ivec2 framebuffer_size);
 
-	[[nodiscard]] auto surface() const -> vk::SurfaceKHR { return *m_surface; }
+	[[nodiscard]] auto surface() const -> vk::SurfaceKHR { return m_surface; }
 	[[nodiscard]] auto device() const -> vk::Device { return *m_device; }
 	[[nodiscard]] auto gpu() const -> Gpu const& { return m_gpu; }
 	[[nodiscard]] auto allocator() const -> VmaAllocator { return m_allocator.get(); }
@@ -52,7 +51,7 @@ class RenderDevice {
 	void set_present_mode(vk::PresentModeKHR present_mode) { m_swapchain->set_present_mode(present_mode); }
 	void set_clear_color(vk::ClearColorValue color) { m_clear_color = color; }
 
-	auto next_frame() -> std::optional<vk::CommandBuffer>;
+	auto next_frame(glm::ivec2 framebuffer_size) -> std::optional<vk::CommandBuffer>;
 	auto render(vk::CommandBuffer command_buffer) -> bool;
 
   private:
@@ -64,13 +63,13 @@ class RenderDevice {
 		vk::CommandBuffer command_buffer{};
 	};
 
-	vk::UniqueSurfaceKHR m_surface{};
+	vk::SurfaceKHR m_surface{};
 	Gpu m_gpu{};
 	vk::UniqueDevice m_device{};
 	vk::Queue m_queue{};
 	vma::UniqueAllocator m_allocator{};
 
-	gsl::not_null<GLFWwindow*> m_window;
+	glm::ivec2 m_framebuffer_size{};
 
 	std::unique_ptr<Swapchain> m_swapchain{};
 
