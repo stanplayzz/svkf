@@ -1,5 +1,6 @@
 #pragma once
 #include "svkf/constants.hpp"
+#include "svkf/core/buffer_allocator.hpp"
 #include "svkf/core/command_block.hpp"
 #include "svkf/core/descriptor_allocator.hpp"
 #include "svkf/core/device_waiter.hpp"
@@ -33,6 +34,7 @@ class RenderDevice {
 	[[nodiscard]] auto device() const -> vk::Device { return *m_device; }
 	[[nodiscard]] auto gpu() const -> Gpu const& { return m_gpu; }
 	[[nodiscard]] auto allocator() const -> VmaAllocator { return m_allocator.get(); }
+	[[nodiscard]] auto buffer_allocator() -> BufferAllocator& { return m_buffer_allocator; }
 	[[nodiscard]] auto framebuffer_size() const -> glm::ivec2 {
 		return {m_render_target->extent.width, m_render_target->extent.height};
 	}
@@ -79,6 +81,7 @@ class RenderDevice {
 	std::optional<RenderTarget> m_render_target{};
 
 	std::unique_ptr<DescriptorAllocator> m_descriptor_allocator;
+	BufferAllocator m_buffer_allocator{};
 
 	vk::ClearColorValue m_clear_color{};
 

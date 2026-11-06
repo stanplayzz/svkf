@@ -46,12 +46,17 @@ RenderDevice::RenderDevice(RenderDeviceCreateInfo const& create_info, vk::Instan
 
 	m_allocator = vma::create_allocator(instance, m_gpu.device, *m_device);
 
-	// create DescriptorAllocator
+	// create DescriptorAllocator & BufferAllocator
 	auto pool_sizes = create_info.pool_sizes;
 	if (pool_sizes.empty()) { pool_sizes = pool_sizes_v; }
 	auto sets_per_pool = create_info.sets_per_pool;
 	if (sets_per_pool == 0) { sets_per_pool = svkf::RenderDeviceCreateInfo::sets_per_pool_v; }
 	m_descriptor_allocator = std::make_unique<DescriptorAllocator>(*m_device, pool_sizes, sets_per_pool);
+	m_buffer_allocator.init(BufferCreateInfo{
+		.allocator = m_allocator.get(),
+		.usage = {},
+		.queue_family = m_gpu.queue_family,
+	});
 }
 
 auto RenderDevice::create_shader(ShaderObjectCreateInfo const& create_info) -> Shader {
@@ -72,6 +77,7 @@ auto RenderDevice::next_frame(glm::ivec2 framebuffer_size) -> std::optional<vk::
 	if (!get_render_target()) { return std::nullopt; }
 
 	m_descriptor_allocator->on_next_frame(m_frame_index);
+	m_buffer_allocator.on_next_frame(m_frame_index);
 
 	auto command_buffer_bi = vk::CommandBufferBeginInfo{};
 	command_buffer_bi.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
